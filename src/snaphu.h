@@ -14,7 +14,7 @@
 /**********************/
 
 #define PROGRAMNAME          "snaphu"
-#define VERSION              "2.0.0"
+#define VERSION              "2.0.1"
 #define BUGREPORTEMAIL       "snaphu@gmail.com"
 #ifdef PI
 #undef PI
@@ -103,6 +103,7 @@
 #define DEF_VERBOSE          FALSE
 #define DEF_AMPLITUDE        TRUE
 #define AUTOCALCSTATMAX      0
+#define MAXNSHORTCYCLE       8192
 #define USEMAXCYCLEFRACTION  (-123)
 #define COMPLEX_DATA         1         /* file format */
 #define FLOAT_DATA           2         /* file format */

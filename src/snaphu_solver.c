@@ -2108,14 +2108,6 @@ void GetArcGrid(nodeT *from, nodeT *to, long *arcrow, long *arccol,
       *arccol=tocol;
       *arcdir=-1;
     }else{
-#define DIAG_GETARCGRID
-#ifdef DIAG_GETARCGRID
-      if(!(torow>0 && nodes[torow-1][tocol].group==BOUNDARYPTR)){
-        fflush(NULL);
-        fprintf(stderr,"BUG: should not have gotten here in GetArcGrid()\n");
-        exit(1);
-      }
-#endif
       *arcrow=torow+nrow-1;
       *arccol=tocol;
       *arcdir=1;
@@ -2134,14 +2126,6 @@ void GetArcGrid(nodeT *from, nodeT *to, long *arcrow, long *arccol,
       *arccol=fromcol;
       *arcdir=1;
     }else{
-#define DIAG_GETARCGRID
-#ifdef DIAG_GETARCGRID
-      if(!(fromrow>0 && nodes[fromrow-1][fromcol].group==BOUNDARYPTR)){
-        fflush(NULL);
-        fprintf(stderr,"BUG: should not have gotten here in GetArcGrid()\n");
-        exit(1);
-      }
-#endif
       *arcrow=fromrow+nrow-1;
       *arccol=fromcol;
       *arcdir=-1;

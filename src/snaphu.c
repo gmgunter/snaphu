@@ -254,6 +254,9 @@ int Unwrap(infileT *infiles, outfileT *outfiles, paramT *params,
               /* see if next tile needs to be unwrapped */
               if(dotilemask[nexttilerow][nexttilecol]){
 
+                /* wait to make sure file i/o, threads, and OS are synched */
+                sleep(sleepinterval);
+                
                 /* fork to create new process */
                 fflush(NULL);
                 pid=fork();
@@ -317,10 +320,9 @@ int Unwrap(infileT *infiles, outfileT *outfiles, paramT *params,
                 nexttilerow++;
               }
 
-              /* wait a little while for file i/o before beginning next tile */
+              /* increment counter of running child processes */
               if(pid!=iterparams->parentpid){
                 nchildren++;
-                sleep(sleepinterval);
               }
 
             }else{
@@ -414,13 +416,14 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
   long nflow, ncycle, mostflow, nflowdone;
   long candidatelistsize, candidatebagsize;
   long isource, nsource;
+  long nincreasedcostiter;
   long *nconnectedarr;
   int *nnodesperrow, *narcsperrow;
   short **flows, **mstcosts;
   float **wrappedphase, **unwrappedphase, **mag, **unwrappedest;
   incrcostT **incrcosts;
   void **costs;
-  totalcostT totalcost, oldtotalcost;
+  totalcostT totalcost, oldtotalcost, mintotalcost;
   nodeT **sourcelist;
   nodeT *source, ***apexes;
   nodeT **nodes, ground[1];
@@ -541,6 +544,9 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
 	      &candidatelist,&iscandidate,&apexes,&bkts,&iincrcostfile,
 	      &incrcosts,&nodes,ground,&nnoderow,&nnodesperrow,&narcrow,
 	      &narcsperrow,nrow,ncol,&notfirstloop,&totalcost,params);
+  oldtotalcost=totalcost;
+  mintotalcost=totalcost;
+  nincreasedcostiter=0;
 
   /* regrow regions with -G parameter */
   if(params->regrowconncomps){
@@ -633,11 +639,18 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
       if(notfirstloop){
 	oldtotalcost=totalcost;
 	totalcost=EvaluateTotalCost(costs,flows,nrow,ncol,NULL,params);
+        if(totalcost<mintotalcost){
+          mintotalcost=totalcost;
+        }
 	if(totalcost>oldtotalcost || (n>0 && totalcost==oldtotalcost)){
           fflush(NULL);
-	  fprintf(sp0,"Unexpected increase in total cost.  Breaking loop\n");
-	  break;
+	  fprintf(sp1,"Caution: Unexpected increase in total cost\n");
 	}
+        if(totalcost > mintotalcost){
+          nincreasedcostiter++;
+        }else{
+          nincreasedcostiter=0;
+        }
       }
 
       /* consider this flow increment done if not too many neg cycles found */
@@ -650,6 +663,12 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
 
       /* find maximum flow on network, excluding arcs affected by masking */
       mostflow=MaxNonMaskFlow(flows,mag,nrow,ncol);
+      if(nincreasedcostiter>=mostflow){
+        fflush(NULL);
+        fprintf(sp0,"WARNING: Unexpected sustained increase in total cost."
+                "  Breaking loop\n");
+        break;
+      }
 
       /* break if we're done with all flow increments or problem is convex */
       if(nflowdone>=params->maxflow || nflowdone>=mostflow || params->p>=1.0){

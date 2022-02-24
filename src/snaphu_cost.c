@@ -48,6 +48,13 @@ void **BuildStatCostsSmooth(float **wrappedphase, float **mag,
 			    long nrow, long ncol, tileparamT *tileparams, 
 			    outfileT *outfiles, paramT *params);
 static
+void MaskCost(costT *costptr);
+static
+void MaskSmoothCost(smoothcostT *smoothcostptr);
+static
+int MaskPrespecifiedArcCosts(void **costsptr, short **weights,
+                             long nrow, long ncol, paramT *params);
+static
 int GetIntensityAndCorrelation(float **mag, float **wrappedphase, 
                                float ***pwrptr, float ***corrptr, 
                                infileT *infiles, long linelen, long nlines,
@@ -200,11 +207,19 @@ int BuildCostArrays(void ***costsptr, short ***mstcostsptr,
 
   /* build or read the statistical cost arrays unless we were told not to */
   if(strlen(infiles->costinfile)){
+
+    /* read cost info from file */
     fprintf(sp1,"Reading cost information from file %s\n",infiles->costinfile);
     costs=NULL;
     Read2DRowColFile((void ***)&costs,infiles->costinfile,
 		     linelen,nlines,tileparams,costtypesize);
     (*costsptr)=costs;
+
+    /* weights of arcs next to masked pixels are set to zero */
+    /* make sure corresponding costs are nulled when costs are read from */
+    /*   file rather than internally generated since read costs are not */
+    /*   multiplied by weights */
+    MaskPrespecifiedArcCosts(costs,weights,nrow,ncol,params);
 
   }else if(params->costmode!=NOSTATCOSTS){
 
@@ -348,16 +363,23 @@ int BuildCostArrays(void ***costsptr, short ***mstcostsptr,
 	  tempcost=negcost;
 	}
 
-	/* clip scalar cost so it is between 0 and params->maxcost */
+	/* clip scalar cost so it is between 1 and params->maxcost */
+        /* note: weights used for MST algorithm will not be zero along */
+        /*   masked edges since they are clipped to 1, but MST is run */
+        /*   once on entire network, not just non-masked regions */
 	weights[row][col]=LClip(tempcost,MINSCALARCOST,params->maxcost);
 	
 	/* assign Lp costs if in Lp mode */
+        /* let scalar cost be zero if costs in both directions are zero */
 	if(params->p>=0){
 	  if(params->bidirlpn){
 	    bidircosts[row][col].posweight=LClip(poscost,0,params->maxcost);
 	    bidircosts[row][col].negweight=LClip(negcost,0,params->maxcost);
 	  }else{
 	    scalarcosts[row][col]=weights[row][col];
+            if(poscost==0 && negcost==0){
+              scalarcosts[row][col]=0;
+            }
 	  }
 	}
       }
@@ -582,10 +604,7 @@ void **BuildStatCostsTopo(float **wrappedphase, float **mag,
       if(colweight[row][col]==0){
 	  
 	/* masked pixel */
-	colcost[row][col].laycost=0;
-	colcost[row][col].offset=LARGESHORT/2;
-	colcost[row][col].dzmax=LARGESHORT;
-	colcost[row][col].sigsq=LARGESHORT;
+        MaskCost(&colcost[row][col]);
 
       }else{
 
@@ -732,10 +751,7 @@ void **BuildStatCostsTopo(float **wrappedphase, float **mag,
       if(rowweight[row][col]==0){
 	  
 	/* masked pixel */
-	rowcost[row][col].laycost=0;
-	rowcost[row][col].offset=LARGESHORT/2;
-	rowcost[row][col].dzmax=LARGESHORT;
-	rowcost[row][col].sigsq=LARGESHORT;
+        MaskCost(&rowcost[row][col]);
 
       }else{
 
@@ -898,10 +914,7 @@ void **BuildStatCostsDefo(float **wrappedphase, float **mag,
       if(colweight[row][col]==0){
 	  
 	/* masked pixel */
-	colcost[row][col].laycost=0;
-	colcost[row][col].offset=0;
-	colcost[row][col].dzmax=LARGESHORT;
-	colcost[row][col].sigsq=LARGESHORT;
+        MaskCost(&colcost[row][col]);
 
       }else{
 
@@ -964,10 +977,7 @@ void **BuildStatCostsDefo(float **wrappedphase, float **mag,
       if(rowweight[row][col]==0){
 	  
 	/* masked pixel */
-	rowcost[row][col].laycost=0;
-	rowcost[row][col].offset=0;
-	rowcost[row][col].dzmax=LARGESHORT;
-	rowcost[row][col].sigsq=LARGESHORT;
+        MaskCost(&rowcost[row][col]);
 
       }else{
 
@@ -1086,8 +1096,7 @@ void **BuildStatCostsSmooth(float **wrappedphase, float **mag,
       if(colweight[row][col]==0){
 	  
 	/* masked pixel */
-	colcost[row][col].offset=0;
-	colcost[row][col].sigsq=LARGESHORT;
+        MaskSmoothCost(&colcost[row][col]);
 
       }else{
 
@@ -1138,8 +1147,7 @@ void **BuildStatCostsSmooth(float **wrappedphase, float **mag,
       if(rowweight[row][col]==0){
 	  
 	/* masked pixel */
-	rowcost[row][col].offset=0;
-	rowcost[row][col].sigsq=LARGESHORT;
+        MaskSmoothCost(&rowcost[row][col]);
 
       }else{
 
@@ -1184,6 +1192,89 @@ void **BuildStatCostsSmooth(float **wrappedphase, float **mag,
   /* return pointer to costs arrays */
   return((void **)costs);
 
+}
+
+
+/* function: MaskCost()
+ * --------------------
+ * Set values of costT structure pointed to by input pointer to give zero
+ * cost, as for arcs next to masked pixels.
+ */
+static
+void MaskCost(costT *costptr){
+
+  /* set to special values */
+  costptr->laycost=0;
+  costptr->offset=LARGESHORT/2;
+  costptr->dzmax=LARGESHORT;
+  costptr->sigsq=LARGESHORT;
+
+}
+
+
+/* function: MaskSmoothCost()
+ * --------------------------
+ * Set values of smoothcostT structure pointed to by input pointer to give zero
+ * cost, as for arcs next to masked pixels.
+ */
+static
+void MaskSmoothCost(smoothcostT *smoothcostptr){
+
+  /* set to special values */
+  smoothcostptr->offset=LARGESHORT/2;
+  smoothcostptr->sigsq=LARGESHORT;
+
+}
+
+
+/* function: MaskPrespecifiedArcCosts()
+ * ------------------------------------
+ * Loop over grid arcs and set costs to null if corresponding weights
+ * are null.
+ */
+static
+int MaskPrespecifiedArcCosts(void **costsptr, short **weights,
+                             long nrow, long ncol, paramT *params){
+
+  long row, col, maxcol;
+  costT **costs;
+  smoothcostT **smoothcosts;
+
+
+  /* set up pointers */
+  costs=NULL;
+  smoothcosts=NULL;
+  if(params->costmode==TOPO || params->costmode==DEFO){
+    costs=(costT **)costsptr;
+  }else if(params->costmode==SMOOTH){
+    smoothcosts=(smoothcostT **)costsptr;
+  }else{
+    fprintf(sp0,"illegal cost mode in MaskPrespecifiedArcCosts()\n");
+    exit(ABNORMAL_EXIT);
+  }
+
+  /* loop over all arcs */
+  for(row=0;row<2*nrow-1;row++){
+    if(row<nrow-1){
+      maxcol=ncol;
+    }else{
+      maxcol=ncol-1;
+    }
+    for(col=0;col<maxcol;col++){
+      if(weights[row][col]==0){
+        if(costs!=NULL){
+          MaskCost(&costs[row][col]);
+        }
+        if(smoothcosts!=NULL){
+          MaskSmoothCost(&smoothcosts[row][col]);
+        }
+      }
+    }
+  }
+
+  /* done */
+  return(0);
+  
 }
 
 
@@ -1761,10 +1852,19 @@ void CalcCostTopo(void **costs, long flow, long arcrow, long arccol,
 
   /* get arc info */
   cost=&((costT **)(costs))[arcrow][arccol];
-  dzmax=cost->dzmax;
   offset=cost->offset;
   sigsq=cost->sigsq;
+  dzmax=cost->dzmax;
   laycost=cost->laycost;
+
+  /* just return 0 if we have zero cost arc */
+  if(sigsq==LARGESHORT){
+    (*poscostptr)=0;
+    (*negcostptr)=0;
+    return;
+  }
+
+  /* compute argument to cost function */
   nshortcycle=params->nshortcycle;
   layfalloffconst=params->layfalloffconst;
   if(arcrow<nrow-1){
@@ -1864,6 +1964,15 @@ void CalcCostDefo(void **costs, long flow, long arcrow, long arccol,
 
   /* get arc info */
   cost=&((costT **)(costs))[arcrow][arccol];
+
+  /* just return 0 if we have zero cost arc */
+  if(cost->sigsq==LARGESHORT){
+    (*poscostptr)=0;
+    (*negcostptr)=0;
+    return;
+  }
+
+  /* compute argument to cost function */
   nshortcycle=params->nshortcycle;
   layfalloffconst=params->layfalloffconst;
   idz1=labs(flow*nshortcycle+cost->offset);
@@ -1944,11 +2053,15 @@ void CalcCostSmooth(void **costs, long flow, long arcrow, long arccol,
 
   /* get arc info */
   cost=&((smoothcostT **)(costs))[arcrow][arccol];
+
+  /* just return 0 if we have zero cost arc */
   if(cost->sigsq==LARGESHORT){
-    *poscostptr=0;
-    *negcostptr=0;
+    (*poscostptr)=0;
+    (*negcostptr)=0;
     return;
   }
+
+  /* compute argument to cost function */
   nshortcycle=params->nshortcycle;
   idz1=labs(flow*nshortcycle+cost->offset);
   idz2pos=labs((flow+nflow)*nshortcycle+cost->offset);
@@ -2238,6 +2351,24 @@ void CalcCostLPBiDir(void **costs, long flow, long arcrow, long arccol,
 /* function: CalcCostNonGrid()
  * ---------------------------
  * Calculates the arc cost given an array of long integer cost lookup tables.
+ *
+ * The cost array for each arc gives the cost for +/-flowmax units of
+ * flow around the flow value with minimum cost, which is not
+ * necessarily flow == 0.  The offset between the flow value with
+ * minimum cost and flow == 0 is given by arroffset = costarr[0].
+ * Positive flow values k for k = 1 to flowmax relative to this min
+ * cost flow value are in costarr[k].  Negative flow values k relative
+ * to the min cost flow from k = -1 to -flowmax costarr[flowmax-k].
+ * costarr[2*flowmax+1] contains a scaling factor for extrapolating
+ * beyond the ends of the cost table, assuming quadratically (with an offset)
+ * increasing cost (subject to rounding and scaling).
+ *
+ * As of summer 2019, the rationale for how seconeary costs are
+ * extrapolated beyond the end of the table has been lost to time, but
+ * the logic at least does give a self-consistent cost function that
+ * is continuous at +/-flowmax and quadratically increases beyond,
+ * albeit not necessarily with a starting slope that has an easily
+ * intuitive basis.
  */
 void CalcCostNonGrid(void **costs, long flow, long arcrow, long arccol, 
                      long nflow, long nrow, paramT *params, 
@@ -2345,6 +2476,13 @@ long EvalCostTopo(void **costs, short **flows, long arcrow, long arccol,
 
   /* get arc info */
   cost=&((costT **)(costs))[arcrow][arccol];
+
+  /* just return 0 if we have zero cost arc */
+  if(cost->sigsq==LARGESHORT){
+    return(0);
+  }
+  
+  /* compute argument to cost function */
   if(arcrow<nrow-1){
 
     /* row cost: dz symmetric with respect to origin */
@@ -2388,6 +2526,13 @@ long EvalCostDefo(void **costs, short **flows, long arcrow, long arccol,
 
   /* get arc info */
   cost=&((costT **)(costs))[arcrow][arccol];
+
+  /* just return 0 if we have zero cost arc */
+  if(cost->sigsq==LARGESHORT){
+    return(0);
+  }
+  
+  /* compute argument to cost function */
   idz1=labs(flows[arcrow][arccol]*(params->nshortcycle)+cost->offset);
 
   /* calculate and return cost */
@@ -2417,9 +2562,13 @@ long EvalCostSmooth(void **costs, short **flows, long arcrow, long arccol,
 
   /* get arc info */
   cost=&((smoothcostT **)(costs))[arcrow][arccol];
+
+  /* just return 0 if we have zero cost arc */
   if(cost->sigsq==LARGESHORT){
     return(0);
   }
+
+  /* compute argument to cost function */
   idz1=labs(flows[arcrow][arccol]*(params->nshortcycle)+cost->offset);
 
   /* calculate and return cost */

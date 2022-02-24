@@ -899,6 +899,11 @@ int CheckParams(infileT *infiles, outfileT *outfiles,
     fprintf(sp0,"defomax exceeds range of short int for given nshortcycle\n");
     exit(ABNORMAL_EXIT);
   }
+  if(params->nshortcycle < 1 || params->nshortcycle > MAXNSHORTCYCLE){
+    fflush(NULL);
+    fprintf(sp0,"illegal value for nshortcycle\n");
+    exit(ABNORMAL_EXIT);
+  }
   if(params->maxnewnodeconst<=0 || params->maxnewnodeconst>1){
     fflush(NULL);
     fprintf(sp0,"maxnewnodeconst must be between 0 and 1\n");

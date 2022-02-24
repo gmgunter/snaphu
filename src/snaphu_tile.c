@@ -122,6 +122,8 @@ int SetRightEdge(long nrow, long ncol, long tilerow, long tilecol,
                  void **voidrightedgecosts, short **rightedgeflows, 
                  paramT *params, short **bulkoffsets);
 static
+short AvgSigSq(short sigsq1, short sigsq2);
+static
 int TraceSecondaryArc(nodeT *primaryhead, nodeT **scndrynodes, 
                       nodesuppT **nodesupp, scndryarcT **scndryarcs, 
                       long ***scndrycosts, long *nnewnodesptr, 
@@ -1205,6 +1207,7 @@ int AssembleTiles(outfileT *outfiles, paramT *params,
   long nrow, ncol, prevnrow, prevncol, nextnrow, nextncol;
   long n, ncycle, nflowdone, nflow, candidatelistsize, candidatebagsize;
   long nnodes, maxnflowcycles, arclen, narcs, sourcetilenum, flowmax;
+  long nincreasedcostiter;
   long *totarclens;
   long ***scndrycosts;
   double avgarclen;
@@ -1216,7 +1219,7 @@ int AssembleTiles(outfileT *outfiles, paramT *params,
   short **tempregions, *regionsbelow, *regionsabove;
   int *nscndrynodes, *nscndryarcs;
   incrcostT **incrcosts;
-  totalcostT totalcost, oldtotalcost;
+  totalcostT totalcost, oldtotalcost, mintotalcost;
   nodeT *source;
   nodeT **scndrynodes, ***scndryapexes;
   signed char **iscandidate;
@@ -1227,7 +1230,7 @@ int AssembleTiles(outfileT *outfiles, paramT *params,
   bucketT *bkts;
   char filename[MAXSTRLEN];
 
-
+  
   /* set up */
   fprintf(sp1,"Assembling tiles\n"); 
   ntilerow=params->ntilerow;
@@ -1370,8 +1373,8 @@ int AssembleTiles(outfileT *outfiles, paramT *params,
 	}
 	scndrycosts[i][j][2*flowmax+1]=LRound(scndrycosts[i][j][2*flowmax+1]
 					      /avgarclen);
-	if(scndrycosts[i][j][2*flowmax+1]<1){
-	  scndrycosts[i][j][2*flowmax+1]=1;
+	if(scndrycosts[i][j][2*flowmax+1]<0){
+	  scndrycosts[i][j][2*flowmax+1]=0;
 	}
       }
     }
@@ -1408,13 +1411,15 @@ int AssembleTiles(outfileT *outfiles, paramT *params,
     incrcosts[i]=(incrcostT *)MAlloc(nscndryarcs[i]*sizeof(incrcostT));
     nnodes+=nscndrynodes[i];
   }
-
+  
   /* set up network for secondary solver */
   InitNetwork(scndryflows,&dummylong,&ncycle,&nflowdone,&dummylong,&nflow,
 	      &candidatebagsize,&candidatebag,&candidatelistsize,
 	      &candidatelist,NULL,NULL,&bkts,&dummylong,NULL,NULL,NULL,
 	      NULL,NULL,NULL,NULL,ntiles,0,&notfirstloop,&totalcost,params);
-
+  oldtotalcost=totalcost;
+  mintotalcost=totalcost;
+  nincreasedcostiter=0;
 
   /* set pointers to functions for nongrid secondary network */
   CalcCost=CalcCostNonGrid;
@@ -1456,10 +1461,17 @@ int AssembleTiles(outfileT *outfiles, paramT *params,
       oldtotalcost=totalcost;
       totalcost=EvaluateTotalCost((void **)scndrycosts,scndryflows,ntiles,0,
 				  nscndryarcs,params);
+      if(totalcost<mintotalcost){
+        mintotalcost=totalcost;
+      }
       if(totalcost>oldtotalcost || (n>0 && totalcost==oldtotalcost)){
         fflush(NULL);
-        fprintf(sp0,"Unexpected increase in total cost.  Breaking loop\n");
-        break;
+        fprintf(sp1,"Caution: Unexpected increase in total cost\n");
+      }
+      if(totalcost>mintotalcost){
+        nincreasedcostiter++;
+      }else{
+        nincreasedcostiter=0;
       }
     }
 
@@ -1470,6 +1482,15 @@ int AssembleTiles(outfileT *outfiles, paramT *params,
     }else{
       nflowdone=1;
     }
+
+    /* break if total cost increase is sustained */
+    if(nincreasedcostiter>=params->maxflow){
+      fflush(NULL);
+      fprintf(sp0,"WARNING: Unexpected sustained increase in total cost."
+              "  Breaking loop\n");
+      break;
+    }
+
 
     /* break if we're done with all flow increments or problem is convex */
     if(nflowdone>=params->maxflow){
@@ -2392,9 +2413,9 @@ int SetUpperEdge(long ncol, long tilerow, long tilecol, void **voidcosts,
 	dpsi-=1.0;
       }
       if(CalcCost==CalcCostTopo || CalcCost==CalcCostDefo){
-	upperedgecosts[0][col].offset=nshortcycle*dpsi;
-	upperedgecosts[0][col].sigsq=ceil((costs[0][col].sigsq
-					   +costsabove[col].sigsq)/2.0);
+	upperedgecosts[0][col].offset=(short )LRound(nshortcycle*dpsi);
+	upperedgecosts[0][col].sigsq=AvgSigSq(costs[0][col].sigsq,
+                                              costsabove[col].sigsq);
 	if(costs[0][col].dzmax>costsabove[col].dzmax){
 	  upperedgecosts[0][col].dzmax=costs[0][col].dzmax;
 	}else{
@@ -2406,9 +2427,9 @@ int SetUpperEdge(long ncol, long tilerow, long tilecol, void **voidcosts,
 	  upperedgecosts[0][col].laycost=costsabove[col].laycost;
 	}
       }else if(CalcCost==CalcCostSmooth){
-	upperedgesmoothcosts[0][col].offset=nshortcycle*dpsi;
-	upperedgesmoothcosts[0][col].sigsq=
-	  ceil((smoothcosts[0][col].sigsq+smoothcostsabove[col].sigsq)/2.0);
+	upperedgesmoothcosts[0][col].offset=(short )LRound(nshortcycle*dpsi);
+	upperedgesmoothcosts[0][col].sigsq
+          =AvgSigSq(smoothcosts[0][col].sigsq,smoothcostsabove[col].sigsq);
       }else if(CalcCost==CalcCostL0 || CalcCost==CalcCostL1
 	       || CalcCost==CalcCostL2 || CalcCost==CalcCostLP){
 	((short **)voidupperedgecosts)[0][col]=
@@ -2528,9 +2549,9 @@ int SetLowerEdge(long nrow, long ncol, long tilerow, long tilecol,
 	dpsi-=1.0;
       }
       if(CalcCost==CalcCostTopo || CalcCost==CalcCostDefo){
-	loweredgecosts[0][col].offset=nshortcycle*dpsi;
-	loweredgecosts[0][col].sigsq=ceil((costs[nrow-2][col].sigsq
-					   +costsbelow[col].sigsq)/2.0);
+	loweredgecosts[0][col].offset=(short )LRound(nshortcycle*dpsi);
+	loweredgecosts[0][col].sigsq=AvgSigSq(costs[nrow-2][col].sigsq,
+                                              costsbelow[col].sigsq);
 	if(costs[nrow-2][col].dzmax>costsbelow[col].dzmax){
 	  loweredgecosts[0][col].dzmax=costs[nrow-2][col].dzmax;
 	}else{
@@ -2542,10 +2563,9 @@ int SetLowerEdge(long nrow, long ncol, long tilerow, long tilecol,
 	  loweredgecosts[0][col].laycost=costsbelow[col].laycost;
 	}
       }else if(CalcCost==CalcCostSmooth){
-	loweredgesmoothcosts[0][col].offset=nshortcycle*dpsi;
-	loweredgesmoothcosts[0][col].sigsq=
-	  ceil((smoothcosts[nrow-2][col].sigsq
-		+smoothcostsbelow[col].sigsq)/2.0);
+	loweredgesmoothcosts[0][col].offset=(short )LRound(nshortcycle*dpsi);
+	loweredgesmoothcosts[0][col].sigsq
+	  =AvgSigSq(smoothcosts[nrow-2][col].sigsq,smoothcostsbelow[col].sigsq);
       }else if(CalcCost==CalcCostL0 || CalcCost==CalcCostL1
 	       || CalcCost==CalcCostL2 || CalcCost==CalcCostLP){
 	((short **)voidloweredgecosts)[0][col]=
@@ -2662,10 +2682,11 @@ int SetLeftEdge(long nrow, long prevncol, long tilerow, long tilecol,
 	dpsi-=1.0;
       }
       if(CalcCost==CalcCostTopo || CalcCost==CalcCostDefo){
-	leftedgecosts[row][0].offset=(TILEDPSICOLFACTOR*nshortcycle*dpsi);
-	leftedgecosts[row][0].sigsq=
-	  ceil((costs[row+nrow-1][0].sigsq
-		+lastcosts[row+nrow-1][prevncol-2].sigsq)/2.0);
+	leftedgecosts[row][0].offset=(short )LRound(TILEDPSICOLFACTOR
+                                                    *nshortcycle*dpsi);
+	leftedgecosts[row][0].sigsq
+          =AvgSigSq(costs[row+nrow-1][0].sigsq,
+                    lastcosts[row+nrow-1][prevncol-2].sigsq);
 	if(costs[row+nrow-1][0].dzmax>lastcosts[row+nrow-1][prevncol-2].dzmax){
 	  leftedgecosts[row][0].dzmax=costs[row+nrow-1][0].dzmax;
 	}else{
@@ -2680,10 +2701,10 @@ int SetLeftEdge(long nrow, long prevncol, long tilerow, long tilecol,
 	}
       }else if(CalcCost==CalcCostSmooth){
 	leftedgesmoothcosts[row][0].offset
-	  =(TILEDPSICOLFACTOR*nshortcycle*dpsi);
-	leftedgesmoothcosts[row][0].sigsq=
-	  ceil((smoothcosts[row+nrow-1][0].sigsq
-		+lastsmoothcosts[row+nrow-1][prevncol-2].sigsq)/2.0);
+	  =(short )LRound(TILEDPSICOLFACTOR*nshortcycle*dpsi);
+	leftedgesmoothcosts[row][0].sigsq
+	  =AvgSigSq(smoothcosts[row+nrow-1][0].sigsq,
+                    lastsmoothcosts[row+nrow-1][prevncol-2].sigsq);
       }else if(CalcCost==CalcCostL0 || CalcCost==CalcCostL1
 	       || CalcCost==CalcCostL2 || CalcCost==CalcCostLP){
 	((short **)voidleftedgecosts)[row][0]=
@@ -2807,10 +2828,11 @@ int SetRightEdge(long nrow, long ncol, long tilerow, long tilecol,
 	dpsi-=1.0;
       }
       if(CalcCost==CalcCostTopo || CalcCost==CalcCostDefo){
-	rightedgecosts[row][0].offset=(TILEDPSICOLFACTOR*nshortcycle*dpsi);
+	rightedgecosts[row][0].offset=(short )LRound(TILEDPSICOLFACTOR
+                                                     *nshortcycle*dpsi);
 	rightedgecosts[row][0].sigsq
-	  =ceil((costs[row+nrow-1][ncol-2].sigsq
-		 +nextcosts[row+nrow-1][0].sigsq)/2.0);
+	  =AvgSigSq(costs[row+nrow-1][ncol-2].sigsq,
+                    nextcosts[row+nrow-1][0].sigsq);
 	if(costs[row+nrow-1][ncol-2].dzmax>nextcosts[row+nrow-1][0].dzmax){
 	  rightedgecosts[row][0].dzmax=costs[row+nrow-1][ncol-2].dzmax;
 	}else{
@@ -2823,10 +2845,10 @@ int SetRightEdge(long nrow, long ncol, long tilerow, long tilecol,
 	}
       }else if(CalcCost==CalcCostSmooth){
 	rightedgesmoothcosts[row][0].offset
-	  =(TILEDPSICOLFACTOR*nshortcycle*dpsi);
+	  =(short )LRound(TILEDPSICOLFACTOR*nshortcycle*dpsi);
 	rightedgesmoothcosts[row][0].sigsq
-	  =ceil((smoothcosts[row+nrow-1][ncol-2].sigsq
-		 +nextsmoothcosts[row+nrow-1][0].sigsq)/2.0);
+	  =AvgSigSq(smoothcosts[row+nrow-1][ncol-2].sigsq,
+                    nextsmoothcosts[row+nrow-1][0].sigsq);
       }else if(CalcCost==CalcCostL0 || CalcCost==CalcCostL1
 	       || CalcCost==CalcCostL2 || CalcCost==CalcCostLP){
 	((short **)voidrightedgecosts)[row][0]=
@@ -2908,6 +2930,34 @@ int SetRightEdge(long nrow, long ncol, long tilerow, long tilecol,
 }
 
 
+/* function: AvgSigSq()
+ * --------------------
+ * Return average of sigsq values after chcking for special value and
+ * clipping to short.
+ */
+static
+short AvgSigSq(short sigsq1, short sigsq2){
+
+  int sigsqavg;
+
+  
+  /* if either value is special LARGESHORT value, use that */
+  if(sigsq1==LARGESHORT || sigsq2==LARGESHORT){
+    return(LARGESHORT);
+  }
+
+  /* compute average */
+  sigsqavg=(int )ceil(0.5*(((int )sigsq1)+((int )sigsq2)));
+
+  /* clip */
+  sigsqavg=LClip(sigsqavg,-LARGESHORT,LARGESHORT);
+
+  /* return */
+  return((short )sigsqavg);
+  
+}
+
+
 /* function: TraceSecondaryArc()
  * -----------------------------
  */
@@ -2931,7 +2981,7 @@ int TraceSecondaryArc(nodeT *primaryhead, nodeT **scndrynodes,
   long i, row, col, nnewnodes, arclen, ntilerow, ntilecol, arcnum;
   long tilenum, nflow, primaryarcrow, primaryarccol, poscost, negcost, nomcost;
   long nnrow, nncol, calccostnrow, nnewarcs, arroffset, nshortcycle;
-  long mincost, mincostflow, minweight;
+  long mincost, mincostflow, minweight, maxcost;
   long *scndrycostarr;
   double sigsq, sumsigsqinv, tempdouble, tileedgearcweight;
   short **flows;
@@ -3096,6 +3146,9 @@ int TraceSecondaryArc(nodeT *primaryhead, nodeT **scndrynodes,
 
       /* keep absolute cost of arc to the previous node */
       if(!zerocost){
+
+        /* accumulate incremental cost in table for each nflow increment */
+        /* offset flow in flow array temporarily by arroffset then undo below */
 	flows[primaryarcrow][primaryarccol]-=primaryarcdir*arroffset;
 	nomcost=EvalCost(costs,flows,primaryarcrow,primaryarccol,calccostnrow,
 			 params);
@@ -3125,22 +3178,35 @@ int TraceSecondaryArc(nodeT *primaryhead, nodeT **scndrynodes,
 	  }
 	}
 	flows[primaryarcrow][primaryarccol]+=primaryarcdir*arroffset;
+
+        /* accumulate term to be used for cost growth beyond table bounds */
 	if(CalcCost==CalcCostTopo || CalcCost==CalcCostDefo){
 	  sigsq=((costT **)costs)[primaryarcrow][primaryarccol].sigsq;
 	}else if(CalcCost==CalcCostSmooth){
 	  sigsq=((smoothcostT **)costs)[primaryarcrow][primaryarccol].sigsq;
 	}else if(CalcCost==CalcCostL0 || CalcCost==CalcCostL1 
 		 || CalcCost==CalcCostL2 || CalcCost==CalcCostLP){
-	  sigsq=((short **)costs)[primaryarcrow][primaryarccol];
+	  minweight=((short **)costs)[primaryarcrow][primaryarccol];
+          if(minweight<1){
+            sigsq=LARGESHORT;
+          }else{
+            sigsq=1.0/(double )minweight;
+          }
 	}else if(CalcCost==CalcCostL0BiDir || CalcCost==CalcCostL1BiDir
 		 || CalcCost==CalcCostL2BiDir || CalcCost==CalcCostLPBiDir){
 	  minweight=LMin(((bidircostT **)costs)[primaryarcrow][primaryarccol]
 			 .posweight,
 			 ((bidircostT **)costs)[primaryarcrow][primaryarccol]
 			 .negweight);
-	  sigsq=1.0/(double )minweight;
+          if(minweight<1){
+            sigsq=LARGESHORT;
+          }else{
+            sigsq=1.0/(double )minweight;
+          }
 	}
-	sumsigsqinv+=(1.0/sigsq);
+        if(sigsq<LARGESHORT){    /* zero cost arc if sigsq == LARGESHORT */
+          sumsigsqinv+=(1.0/sigsq);
+        }
       }
 
       /* break if found the secondary arc tail */
@@ -3161,6 +3227,7 @@ int TraceSecondaryArc(nodeT *primaryhead, nodeT **scndrynodes,
 
     /* find flow index with minimum cost */
     mincost=0;
+    maxcost=0;
     mincostflow=0;
     for(nflow=1;nflow<=flowmax;nflow++){
       if(scndrycostarr[nflow]<mincost){
@@ -3171,6 +3238,18 @@ int TraceSecondaryArc(nodeT *primaryhead, nodeT **scndrynodes,
 	mincost=scndrycostarr[flowmax+nflow];
 	mincostflow=-nflow;
       }
+      if(scndrycostarr[nflow]>maxcost){
+	maxcost=scndrycostarr[nflow];
+      }
+      if(scndrycostarr[flowmax+nflow]>maxcost){
+	maxcost=scndrycostarr[flowmax+nflow];
+      }
+    }
+
+    /* if cost was all zero, treat as zero cost arc */
+    if(maxcost==mincost){
+      zerocost=TRUE;
+      sumsigsqinv=0;
     }
 
     /* break if cost array adequately centered on minimum cost flow */
@@ -3198,12 +3277,16 @@ int TraceSecondaryArc(nodeT *primaryhead, nodeT **scndrynodes,
     return(0);
   }
 
-
   /* see if we have a secondary arc on the edge of the full-sized array */
   /* these arcs have zero cost since the edge is treated as a single node */
+  /* secondary arcs whose primary arcs all have zero cost are also zeroed */
   if(zerocost){
 
     /* set sum of standard deviations to indicate zero-cost secondary arc */
+    scndrycostarr[0]=0;
+    for(nflow=1;nflow<=2*flowmax;nflow++){
+      scndrycostarr[nflow]=0;
+    }
     scndrycostarr[2*flowmax+1]=ZEROCOSTARC;
 
   }else{
@@ -4042,12 +4125,6 @@ int AssembleTileConnComps(long linelen, long nlines,
               conncompsizes[nconncomp].icompfull=0;
               conncompsizes[nconncomp].npix=tileconncompsizes[k].npix;
               nconncomp++;
-#define DEBUG              
-#ifdef DEBUG              
-if(nconncomp>nconncompmem){
-  fprintf(sp0,"ERROR--THIS IS A BUG\n");
-}
-#endif
             }
           }
             
