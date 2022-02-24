@@ -1,3 +1,10 @@
+Notable changes in v2.0.3 since v2.0.2:
+---------------------------------------
+
+* Fixed limit-checking error that would sometimes cause segmentation fault when
+  width of masked area was only one pixel at right or bottom edges.
+  
+
 Notable changes in v2.0.2 since v2.0.1:
 ---------------------------------------
 

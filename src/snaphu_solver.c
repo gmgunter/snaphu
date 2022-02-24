@@ -2095,7 +2095,7 @@ void GetArcGrid(nodeT *from, nodeT *to, long *arcrow, long *arccol,
     *arccol=fromcol;
     *arcdir=-1;
   }else if(fromrow==BOUNDARYROW){ /* arc from boundary pointer */  
-    if(tocol<ncol-1 && nodes[torow][tocol+1].group==BOUNDARYPTR){
+    if(tocol<ncol-2 && nodes[torow][tocol+1].group==BOUNDARYPTR){
       *arcrow=torow;
       *arccol=tocol+1;
       *arcdir=-1;
@@ -2103,7 +2103,7 @@ void GetArcGrid(nodeT *from, nodeT *to, long *arcrow, long *arccol,
       *arcrow=torow;
       *arccol=tocol;
       *arcdir=1;
-    }else if(torow<nrow-1 && nodes[torow+1][tocol].group==BOUNDARYPTR){
+    }else if(torow<nrow-2 && nodes[torow+1][tocol].group==BOUNDARYPTR){
       *arcrow=torow+1+nrow-1;
       *arccol=tocol;
       *arcdir=-1;
@@ -2113,7 +2113,7 @@ void GetArcGrid(nodeT *from, nodeT *to, long *arcrow, long *arccol,
       *arcdir=1;
     }
   }else if(torow==BOUNDARYROW){   /* arc to boundary pointer */
-    if(fromcol<ncol-1 && nodes[fromrow][fromcol+1].group==BOUNDARYPTR){
+    if(fromcol<ncol-2 && nodes[fromrow][fromcol+1].group==BOUNDARYPTR){
       *arcrow=fromrow;
       *arccol=fromcol+1;
       *arcdir=1;
@@ -2121,7 +2121,7 @@ void GetArcGrid(nodeT *from, nodeT *to, long *arcrow, long *arccol,
       *arcrow=fromrow;
       *arccol=fromcol;
       *arcdir=-1;
-    }else if(fromrow<nrow-1 && nodes[fromrow+1][fromcol].group==BOUNDARYPTR){
+    }else if(fromrow<nrow-2 && nodes[fromrow+1][fromcol].group==BOUNDARYPTR){
       *arcrow=fromrow+1+nrow-1;
       *arccol=fromcol;
       *arcdir=1;
