@@ -1,3 +1,12 @@
+Notable changes in v2.0.5 since v2.0.4:
+---------------------------------------
+
+* Change definition of connectivity of nodes that are completely separated by
+  masked pixels to fix bugs that could cause crash and/or infinite
+  looping when regions are separated by single row or column of masked
+  pixels.
+
+
 Notable changes in v2.0.4 since v2.0.3:
 ---------------------------------------
 

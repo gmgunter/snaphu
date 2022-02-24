@@ -602,7 +602,7 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
       /* set the tree root (equivalent to source of shortest path problem) */
       sourcelist=NULL;
       nconnectedarr=NULL;
-      nsource=SelectSources(nodes,ground,nflow,flows,ngroundarcs,
+      nsource=SelectSources(nodes,mag,ground,nflow,flows,ngroundarcs,
                             nrow,ncol,params,&sourcelist,&nconnectedarr);
 
       /* set up network variables for tree solver */
@@ -618,9 +618,13 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
         source=sourcelist[isource];
 
         /* show status if verbose */
-        fprintf(sp3,"Source %ld row, col = %d, %d\n",
-                isource,source->row,source->col);
-
+        if(source->row==GROUNDROW){
+          fprintf(sp3,"Source %ld: (edge ground)\n",isource);
+        }else{
+          fprintf(sp3,"Source %ld: row, col = %d, %d\n",
+                  isource,source->row,source->col);
+        }
+        
         /* run the solver, and increment nflowdone if no cycles are found */
         n+=TreeSolve(nodes,NULL,ground,source,
                      &candidatelist,&candidatebag,
@@ -636,6 +640,9 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
       free(nconnectedarr);
     
       /* evaluate and save the total cost (skip if first loop through nflow) */
+      fprintf(sp2,"Current solution cost: %.16g\n",
+              (double )EvaluateTotalCost(costs,flows,nrow,ncol,NULL,params));
+      fflush(NULL);
       if(notfirstloop){
         oldtotalcost=totalcost;
         totalcost=EvaluateTotalCost(costs,flows,nrow,ncol,NULL,params);
