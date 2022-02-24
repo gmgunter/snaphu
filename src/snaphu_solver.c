@@ -1751,10 +1751,10 @@ int DischargeBoundary(nodeT **nodes, nodeT *ground,
       if(row<nrow-1){
         if(iscandidate[row][col]){
           if(col>0){
-            nodes[row][col].outcost=0;
+            nodes[row][col-1].outcost=0;
           }
           if(col<ncol-1){
-            nodes[row][col+1].outcost=0;
+            nodes[row][col].outcost=0;
           }
         }
         iscandidate[row][col]=FALSE;
@@ -1762,10 +1762,10 @@ int DischargeBoundary(nodeT **nodes, nodeT *ground,
       if(col<ncol-1){
         if(iscandidate[row+nrow-1][col]){
           if(row>0){
-            nodes[row][col].outcost=0;
+            nodes[row-1][col].outcost=0;
           }
           if(row<nrow-1){
-            nodes[row+1][col].outcost=0;
+            nodes[row][col].outcost=0;
           }
         }
         iscandidate[row+nrow-1][col]=FALSE;

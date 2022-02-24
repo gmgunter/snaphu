@@ -1,3 +1,17 @@
+Notable changes in v2.0.2 since v2.0.1:
+---------------------------------------
+
+* Fixed indexing error that would sometimes cause segmentation fault when
+  discharging boundary of masked region.
+  
+
+Notable changes in v2.0.1 since v2.0.0:
+---------------------------------------
+
+* Bug fixes affecting externally generated costs read from a file and
+  handling of zero-cost primary and secondary arcs.
+  
+
 Notable changes in v2.0 since v1.4.2:
 -------------------------------------
 
