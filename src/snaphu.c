@@ -416,7 +416,7 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
   long nflow, ncycle, mostflow, nflowdone;
   long candidatelistsize, candidatebagsize;
   long isource, nsource;
-  long nincreasedcostiter;
+  long nnondecreasedcostiter;
   long *nconnectedarr;
   int *nnodesperrow, *narcsperrow;
   short **flows, **mstcosts;
@@ -546,7 +546,7 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
               &narcsperrow,nrow,ncol,&notfirstloop,&totalcost,params);
   oldtotalcost=totalcost;
   mintotalcost=totalcost;
-  nincreasedcostiter=0;
+  nnondecreasedcostiter=0;
 
   /* regrow regions with -G parameter */
   if(params->regrowconncomps){
@@ -654,9 +654,9 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
           fprintf(sp1,"Caution: Unexpected increase in total cost\n");
         }
         if(totalcost > mintotalcost){
-          nincreasedcostiter++;
+          nnondecreasedcostiter++;
         }else{
-          nincreasedcostiter=0;
+          nnondecreasedcostiter=0;
         }
       }
 
@@ -670,9 +670,9 @@ int UnwrapTile(infileT *infiles, outfileT *outfiles, paramT *params,
 
       /* find maximum flow on network, excluding arcs affected by masking */
       mostflow=MaxNonMaskFlow(flows,mag,nrow,ncol);
-      if(nincreasedcostiter>=mostflow){
+      if(nnondecreasedcostiter>=2*mostflow){
         fflush(NULL);
-        fprintf(sp0,"WARNING: Unexpected sustained increase in total cost."
+        fprintf(sp0,"WARNING: No overall cost reduction for too many iterations."
                 "  Breaking loop\n");
         break;
       }

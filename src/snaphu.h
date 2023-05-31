@@ -14,7 +14,7 @@
 /**********************/
 
 #define PROGRAMNAME          "snaphu"
-#define VERSION              "2.0.5"
+#define VERSION              "2.0.6"
 #define BUGREPORTEMAIL       "snaphu@gmail.com"
 #ifdef PI
 #undef PI

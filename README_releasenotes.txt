@@ -1,3 +1,10 @@
+Notable changes in v2.0.6 since v2.0.5:
+---------------------------------------
+
+* Change conditions for breaking out of outermost loop over flow
+  increments in optimizer to avoid possible infinite loop issue.
+
+
 Notable changes in v2.0.5 since v2.0.4:
 ---------------------------------------
 
