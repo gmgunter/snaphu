@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import re
 from pathlib import Path
 from urllib.parse import urljoin
@@ -84,10 +85,18 @@ if __name__ == "__main__":
     remote_version, code_url = fetch_stanford_version_url()
     current_version = get_current_version_from_github_readme()
 
-    if remote_version != current_version:
-        print("::set-output name=new_version_available::true")
-        print("::set-output name=remote_version::{remote_version}")
-        print("TODO: Update local code...")
-    else:
-        print("::set-output name=new_version_available::false")
-        print("Local version matches remote: nothing to do")
+    try:
+        if remote_version != current_version:
+            print("::set-output name=new_version_available::true")
+            print("::set-output name=remote_version::{remote_version}")
+            print("New version available: need to update local code...")
+            with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+                print("new_version_available=true", file=fh)
+                print(f"remove_version={remote_version}", file=fh)
+        else:
+            print("Local version matches remote: nothing to do")
+            with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+                print("new_version_available=false", file=fh)
+    except KeyError:
+        # Not in github action context
+        pass
