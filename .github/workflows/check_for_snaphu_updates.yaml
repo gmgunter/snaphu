@@ -1,0 +1,65 @@
+name: Check Latest Version Workflow
+
+on:
+  schedule:
+    # Runs at 00:00 UTC every day
+    - cron: '0 0 * * *'
+
+jobs:
+  check-version-and-update:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4
+
+    - name: Run the version check script
+      id: version_check
+      run: |
+        python .github/workflows/compare_latest_version.py
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Configure Git
+      if: steps.version_check.outputs.new_version_available == 'true'
+      run: |
+        git config --global user.name 'github-actions'
+        git config --global user.email 'github-actions@github.com'
+
+    - name: Create new branch
+      if: steps.version_check.outputs.new_version_available == 'true'
+      run: |
+        git checkout -b update-snaphu-${{ steps.version_check.outputs.remote_version }}
+
+    # Add steps to modify your code or files to reflect the new version here
+
+    - name: Commit changes
+      if: steps.version_check.outputs.new_version_available == 'true'
+      run: |
+        git commit -am "Update to snaphu ${{ steps.version_check.outputs.remote_version }}"
+
+    - name: Push changes
+      if: steps.version_check.outputs.new_version_available == 'true'
+      run: |
+        git push origin update-snaphu-${{ steps.version_check.outputs.remote_version }}
+
+    - name: Create Pull Request
+      if: steps.version_check.outputs.new_version_available == 'true'
+      uses: peter-evans/create-pull-request@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "Update to snaphu ${{ steps.version_check.outputs.remote_version }}"
+        title: "Update to snaphu ${{ steps.version_check.outputs.remote_version }}"
+        body: |
+          Updating to the latest snaphu version ${{ steps.version_check.outputs.remote_version }}.
+        branch: update-snaphu-${{ steps.version_check.outputs.remote_version }}
