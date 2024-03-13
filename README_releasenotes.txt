@@ -1,3 +1,10 @@
+Notable changes in v2.0.7 since v2.0.6:
+---------------------------------------
+
+* Fix bug that causes "out of memory" error when when there are no
+  connected components in the first two tiles.
+
+
 Notable changes in v2.0.6 since v2.0.5:
 ---------------------------------------
 

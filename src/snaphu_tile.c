@@ -4112,10 +4112,12 @@ int AssembleTileConnComps(long linelen, long nlines,
 
           /* get more memory for full set of connected components sizes */
           nmemold=nconncompmem;
-          nconncompmem+=ntileconncomp;
-          conncompsizes=(conncompsizeT *)ReAlloc(conncompsizes,
-                                                 (nconncompmem
-                                                  *sizeof(conncompsizeT)));
+          if(ntileconncomp>0){
+            nconncompmem+=ntileconncomp;
+            conncompsizes=(conncompsizeT *)ReAlloc(conncompsizes,
+                                                   (nconncompmem
+                                                    *sizeof(conncompsizeT)));
+          }
 
           /* store conncomp sizes from tile in full list */
           for(k=0;k<ntileconncompmem;k++){
